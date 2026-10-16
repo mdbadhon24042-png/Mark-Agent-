@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MARK AI Vision Scanner</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#050b12;color:#eaf7ff;font-family:Arial,sans-serif}
+header{padding:18px;text-align:center;border-bottom:1px solid #163343}
+h1{margin:0;color:#55f5d2;font-size:25px;letter-spacing:2px}
+.sub{color:#8daab9;font-size:12px;margin-top:7px}
+main{max-width:600px;margin:auto;padding:16px}
+.card{background:#0b1722;border:1px solid #183747;border-radius:17px;padding:16px;margin-bottom:15px}
+label{display:block;color:#a8c3d2;font-size:13px;margin-bottom:7px}
+input,select,textarea{width:100%;padding:12px;background:#07111a;color:#fff;border:1px solid #294553;border-radius:10px;font-size:15px;margin-bottom:13px}
+button{cursor:pointer;border:1px solid #286071;border-radius:10px;background:#102b38;color:#eaffff;padding:12px;font-size:14px}
+button:active{transform:scale(.98)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row button{flex:1;min-width:65px}
+button.active{background:#087d70;border-color:#4bf5d2}
+.primary{width:100%;background:linear-gradient(100deg,#087e78,#1768ad);border:0;font-size:16px;font-weight:bold;padding:15px}
+#orb{width:125px;height:125px;margin:12px auto 20px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#a8fff1,#1be6c5 20%,#087eaa 55%,#07111a 75%);box-shadow:0 0 25px #14d9c477,0 0 60px #0789a455;animation:pulse 2s infinite}
+@keyframes pulse{50%{box-shadow:0 0 40px #14d9c4,0 0 80px #0789a488}}
+#status{font-size:13px;color:#8fdccc;text-align:center;margin:12px 0}
+#result{white-space:pre-wrap;line-height:1.7;font-size:14px;overflow-wrap:anywhere}
+#preview{width:100%;max-height:280px;object-fit:contain;border-radius:10px;display:none;margin-bottom:12px}
+.small{font-size:12px;color:#8daab9;line-height:1.6}
+details summary{cursor:pointer;color:#9bbbc9;padding:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>MARK AI</h1>
+  <div class="sub">VISION SCANNER · AI ANALYSIS</div>
+</header>
+<main>
+  <section class="card">
+    <div id="orb"></div>
+    <div id="status">সার্ভারের তথ্য সেট করে শুরু করো</div>
+    <label>Market</label>
+    <select id="market">
+      <option>OTC</option>
+      <option>Forex</option>
+      <option>Crypto</option>
+      <option>Stocks</option>
+    </select>
+    <label>Pair (যেমন EUR/USD)</label>
+    <input id="pair" placeholder="Pair-এর নাম লেখো">
+    <label>Timeframe</label>
+    <div class="row" id="frames">
+      <button class="active" data-t="1m">1m</button>
+      <button data-t="5m">5m</button>
+      <button data-t="10m">10m</button>
+      <button data-t="15m">15m</button>
+      <button data-t="30m">30m</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <label>Chart-এর ছবি আপলোড করো</label>
+    <input type="file" id="imageFile" accept="image/*">
+    <img id="preview" alt="Chart preview">
+    <label>অতিরিক্ত তথ্য (ঐচ্ছিক)</label>
+    <textarea id="notes" rows="3" placeholder="যেমন: support, resistance, candle movement"></textarea>
+    <button class="primary" id="scan">⌕  AI ANALYSIS</button>
+    <p class="small">নোট: এই সংস্করণে ছবিটি প্রিভিউ হিসেবে দেখানো হবে। বর্তমান সার্ভারের /execute endpoint শুধু লেখা বিশ্লেষণ করে; ছবির প্রকৃত Vision analysis-এর জন্য backend পরিবর্তন দরকার।</p>
+  </section>
+
+  <section class="card">
+    <label>Analysis Result</label>
+    <div id="result">এখানে AI-এর উত্তর দেখা যাবে।</div>
+    <div class="row" style="margin-top:15px">
+      <button id="speak">🔊 উত্তর শুনুন</button>
+      <button id="stop">■ বন্ধ করুন</button>
+    </div>
+    <audio id="player" controls style="width:100%;margin-top:12px;display:none"></audio>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>⚙ সার্ভার ও API সেটিংস</summary>
+      <p class="small">Render server URL এবং ব্যক্তিগত API_KEY দাও। API key এই ব্রাউজারে রাখা হবে না। পাবলিক ওয়েবসাইটে ব্যক্তিগত key ব্যবহার না করে backend proxy ব্যবহার করা নিরাপদ।</p>
+      <label>Render Server URL</label>
+      <input id="server" value="https://mark-agent-bqnj.onrender.com">
+      <label>API_KEY (Render-এর API_KEY value)</label>
+      <input id="apiKey" type="password" autocomplete="off" placeholder="ব্যক্তিগত API key">
+      <button id="health">Health Check</button>
+      <button id="save">সেটিংস প্রয়োগ</button>
+    </details>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let timeframe = "1m";
+let answer = "";
+
+document.querySelectorAll("#frames button").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll("#frames button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    timeframe = btn.dataset.t;
+  });
+});
+
+$("imageFile").addEventListener("change",()=>{
+  const file = $("imageFile").files[0];
+  if(!file){$("preview").style.display="none";return;}
+  if(!file.type.startsWith("image/")){
+    $("status").textContent="একটি image file নির্বাচন করো।";return;
+  }
+  $("preview").src=URL.createObjectURL(file);
+  $("preview").style.display="block";
+});
+
+function config(){
+  const server=$("server").value.trim().replace(/\/+$/,"");
+  const key=$("apiKey").value.trim();
+  if(!server){throw Error("Render server URL দাও।");}
+  return {server,key};
+}
+async function request(path,body){
+  const c=config();
+  const headers={"Content-Type":"application/json"};
+  if(c.key) headers.Authorization="Bearer "+c.key;
+  const response=await fetch(c.server+path,{
+    method:"POST",headers,body:JSON.stringify(body)
+  });
+  const data=await response.json().catch(()=>({error:"Server-এর উত্তর পড়া যায়নি"}));
+  if(!response.ok) throw Error(data.error||("HTTP "+response.status));
+  return data;
+}
+$("save").onclick=()=>{
+  try{config();$("status").textContent="সেটিংস প্রয়োগ হয়েছে।";}
+  catch(e){$("status").textContent=e.message;}
+};
+$("health").onclick=async()=>{
+  try{
+    const c=config();
+    $("status").textContent="সার্ভার পরীক্ষা হচ্ছে...";
+    const r=await fetch(c.server+"/health");
+    const d=await r.json();
+    $("status").textContent="Status: "+d.status+
+      " | Gemini: "+d.gemini_configured+
+      " | Voice: "+d.voice_configured;
+  }catch(e){$("status").textContent="Health check ব্যর্থ: "+e.message;}
+};
+$("scan").onclick=async()=>{
+  const pair=$("pair").value.trim();
+  const notes=$("notes").value.trim();
+  if(!pair){$("status").textContent="আগে Pair-এর নাম লেখো।";return;}
+  $("scan").disabled=true;
+  $("status").textContent="AI বিশ্লেষণ করছে...";
+  $("result").textContent="";
+  $("player").style.display="none";
+  const prompt=
+`তুমি একটি সতর্ক market chart analysis assistant।
+Market: ${$("market").value}
+Pair: ${pair}
+Timeframe: ${timeframe}
+ব্যবহারকারীর অতিরিক্ত তথ্য: ${notes||"দেওয়া হয়নি"}
+
+শুধু এই তথ্যের ভিত্তিতে যা জানা যায় তা ব্যাখ্যা করো।
+চার্টের ছবি সার্ভারে বিশ্লেষণ করা হয়নি, তাই ছবি দেখেছ বলে দাবি করবে না।
+লাইভ দাম বা indicator data না থাকলে তা স্পষ্ট বলবে।
+সম্ভাব্য bullish ও bearish পরিস্থিতি, অনিশ্চয়তা এবং ঝুঁকি বাংলায় ব্যাখ্যা করো।
+নিশ্চিত লাভ বা নিশ্চিত CALL/PUT সংকেত দাবি করবে না।`;
+  try{
+    const d=await request("/execute",{message:prompt});
+    answer=d.answer||"AI কোনো লেখা ফেরত দেয়নি।";
+    $("result").textContent=answer;
+    $("status").textContent="বিশ্লেষণ সম্পন্ন।";
+  }catch(e){
+    $("status").textContent="সমস্যা: "+e.message;
+    $("result").textContent="সার্ভার সংযোগ বা API সমস্যা। Render logs পরীক্ষা করো।";
+  }finally{$("scan").disabled=false;}
+};
+$("speak").onclick=async()=>{
+  if(!answer){$("status").textContent="আগে AI Analysis চালাও।";return;}
+  $("speak").disabled=true;
+  $("status").textContent="Voice তৈরি হচ্ছে...";
+  try{
+    const d=await request("/voice",{message:answer});
+    if(!d.audio_base64) throw Error("Audio পাওয়া যায়নি।");
+    const bytes=atob(d.audio_base64);
+    const array=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++) array[i]=bytes.charCodeAt(i);
+    const blob=new Blob([array],{type:d.audio_content_type||"audio/mpeg"});
+    const player=$("player");
+    if(player.dataset.url) URL.revokeObjectURL(player.dataset.url);
+    player.dataset.url=URL.createObjectURL(blob);
+    player.src=player.dataset.url;
+    player.style.display="block";
+    await player.play();
+    $("status").textContent="Voice চলছে।";
+  }catch(e){$("status").textContent="Voice সমস্যা: "+e.message;}
+  finally{$("speak").disabled=false;}
+};
+$("stop").onclick=()=>{
+  $("player").pause();
+  $("player").currentTime=0;
+  $("status").textContent="Voice বন্ধ করা হয়েছে।";
+};
+</script>
+</body>
+        </html>
+        
