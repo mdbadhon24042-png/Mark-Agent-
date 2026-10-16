@@ -1,5 +1,2 @@
 
-Flask
-python-dotenv
-google-genai
-gunicorn
+: Flask google-gen ai gunicorn elevenlabs.
