@@ -1,7 +1,7 @@
-Flask
+
+quart
 google-genai
 gunicorn
 elevenlabs
 websockets
-asgiref
-uvicorn
+hypercorn
